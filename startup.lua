@@ -229,7 +229,7 @@ local function loadModules()
   print("Initializing "..#awaitingInit.." modules")
   
   for i,v in ipairs(awaitingInit) do
-    local success, retval = xpcall(v, debug.traceback)
+    local success, retval = xpcall(v, debug.traceback, sharedEnvironment)
     if not success then
       dumpError(tostring(success)..":::"..tostring(retval))
       error("Failed to load a module")
