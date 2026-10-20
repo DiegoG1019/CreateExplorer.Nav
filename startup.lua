@@ -214,6 +214,8 @@ local function loadModules()
     
     if moduleTab then
       table.insert(modules, moduleTab)
+    else
+      print("Module "..tostring(i).." did not have either an update or a listener")
     end
     
     if type(moduleInitFunc) == "function" then
@@ -222,7 +224,7 @@ local function loadModules()
     
   end
   
-  print("Registered "..#modules.." module listeners")
+  print("Registered "..#modules.." modules")
   
   print("Initializing "..#awaitingInit.." modules")
   
