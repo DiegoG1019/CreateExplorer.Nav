@@ -5,15 +5,34 @@ print("Initializing Prestigious Navigator Module")
 local gimbalCorrectInvertX, gimbalCorrectInvertZ, gimbalOffsetDeg
 local TwoPi = math.pi * 2
 
+local velSZName = "velocity_sensor_1"
+local velSXName = "velocity_sensor_2"
+local velSYName = "velocity_sensor_3"
+
 local liftRL1Name = "Lift1"
 local liftRL2Name = "Lift2"
 local pushRL1Name = "Push1"
 local pushRL2Name = "Push2"
 local manualControlsRLName = "ManualControls"
-local gimbalCorrectPXName = "GimbalCorrectPositiveX"
+
+local gimbalCorrectPXName = "GimbalCorrectPositiveX" -- WARNING! Not set!
 local gimbalCorrectNXName = "GimbalCorrectNegativeX"
 local gimbalCorrectPZName = "GimbalCorrectPositiveZ"
 local gimbalCorrectNZName = "GimbalCorrectNegativeZ"
+
+local fuelTank1Name = "create:fluid_tank_0"
+local fuelTank2Name = "create_connected:fluid_vessel_0"
+local fuelTank1Max = 1152000
+local fuelTank2Max = 2232000
+
+local context
+local target
+local redstoneLinks
+local navTable
+local gimbalSensor
+local altitudeSensor
+local velSZ, velSX, velSY
+local fuelTank1, fuelTank2
 
 local function systemHandlerTableAction(self)
     if (self["delay"] == 0) or (os.clock() > (self["lastClock"] + self["delay"])) then
@@ -35,11 +54,6 @@ local function newSystemHandler(delay, updateValue)
     }
 end
 
-local context
-local target
-local redstoneLinks
-local navTable
-
 local distanceHandler, altitudeHandler, gimbalHandler, turnDegHandler
 
 local status = {
@@ -48,56 +62,57 @@ local status = {
         ["targetSqr"] = nil,
         ["travelledSqr"] = 0
     },
-    ["turnDeg"] = { 
-        ["currentDegFromNorth"] = 0,-- navTable1
-        ["targetDegFromNorth"] = 0,
-        ["currentIncline"] = 0
+    ["facingAngle"] = {
+        ["currentDegFromNorth"] = 0,
+        ["targetDegFromNorth"] = nil
     },
     ["propeller"] ={
-        ["liftRpm"] = 0,-- line 11
-        ["pushRpm"] = 0,-- line 12
-        ["tailDeg"] = 0,-- line 13
-        ["tailDegRef"] = 0,-- line 14 -- 90 deg offset from tailDeg sensor, to tell angle direction
-        ["liftRL1"] = 0,-- redstonePeri1
-        ["liftRL2"] = 0,-- redstonePeri2
-        ["pushRL1"] = 0,-- redstonePeri3
-        ["pushRL2"] = 0,-- redstonePeri4
+        ["liftRpm"] = 0,-- line 1
+        ["pushRpm"] = 0,-- line 2
+        ["tailDeg"] = 0,-- line 3
+        ["tailDegRef"] = 0,-- line 4 -- 90 deg offset from tailDeg sensor, to tell angle direction
+        ["tailDegAngle"] = 0,
+        ["liftRL1"] = 0,
+        ["liftRL2"] = 0,
+        ["pushRL1"] = 0,
+        ["pushRL2"] = 0,
         ["liftLevel"] = 0,
         ["pushLevel"] = 0
     },
     ["speed"] = {
-        ["x"] = 0,-- line 1
-        --["y"] = 0,-- line 2 -- We don't need this one, we've got an altitude sensor that's more accurate
-        ["z"] = 0 -- line 3
+        ["x"] = 0,
+        ["y"] = 0,
+        ["z"] = 0
     },
     ["altitude"] = {
         ["target"] = nil,
-        ["current"] = 0 -- line 4
+        ["current"] = 0,
+        ["pressure"] = 0
     },
     ["gimbal"] = {
-        ["x"] = 0,-- line 5
-        ["z"] = 0,-- line 6,
-        [gimbalCorrectNXName] = 0,
-        [gimbalCorrectNZName] = 0,
-        [gimbalCorrectPXName] = 0,
-        [gimbalCorrectPZName] = 0
+        ["x"] = 0,
+        ["z"] = 0,
+        ["correctionPX"] = 0,
+        ["correctionNX"] = 0,
+        ["correctionPZ"] = 0,
+        ["correctionNZ"] = 0
     },
     ["fuel"] = {
         {
-            ["level"] = 0,-- line 7
-            ["max"] = 0,-- line 8
+            ["level"] = 0,
+            ["max"] = fuelTank1Max,
             ["perc"] = 0
         },
         {
-            ["level"] = 0,-- line 9
-            ["max"] = 0,-- line 10
+            ["level"] = 0,
+            ["max"] = fuelTank2Max,
             ["perc"] = 0
         }
     }
 }
 
 local function parseNumber(str)
-    return tonumber(str:match("([0-9]+)"))
+    return tonumber(str:match("([0-9]+)") or 0)
 end
 
 return {
@@ -136,7 +151,7 @@ end,
 ["Init"] = function(ctx)
     context = ctx
     if(type(ctx) ~= "table") then
-        error("Invalid context provided")
+        error("Invalid context provided: Expected a 'table', got '"..type(ctx).."'")
     end
 
     if type(context.AstralNet) ~= "table" then
@@ -150,6 +165,22 @@ end,
 
     navTable = peripheral.find("navigation_table")
     if not navTable then error("Could not find navigation_table peripheral") end
+
+    gimbalSensor = peripheral.find("gimbal_sensor")
+    if not gimbalSensor then error("Could not find gimbal_sensor peripheral") end
+
+    altitudeSensor = peripheral.find("altitude_sensor")
+    if not altitudeSensor then error("Could not find altitude_sensor peripheral") end
+
+    fuelTank1 = peripheral.wrap(fuelTank1Name)
+    if not fuelTank1 then error("Could not find '"..fuelTank1Name.."' peripheral") end
+
+    fuelTank2 = peripheral.find(fuelTank2Name)
+    if not fuelTank2 then error("Could not find '"..fuelTank2Name.."' peripheral") end
+
+    velSX = peripheral.wrap(velSXName)
+    velSY = peripheral.wrap(velSYName)
+    velSZ = peripheral.wrap(velSZName)
 
     redstoneLinks = {}
     local rlCount = 0
@@ -206,25 +237,25 @@ end,
             -- After all of that, they're still degrees, since we're working with them as vectors and the unit makes no difference
 
             if (x2 < 0) then
-                status["gimbal"][gimbalCorrectPXName] = math.max(0, status["gimbal"][gimbalCorrectPXName] - 1)
-                status["gimbal"][gimbalCorrectNXName] = math.min(15, status["gimbal"][gimbalCorrectNXName] + 1)
+                status["gimbal"]["correctionPX"] = math.max(0, status["gimbal"]["correctionPX"] - 1)
+                status["gimbal"]["correctionNX"] = math.min(15, status["gimbal"]["correctionNX"] + 1)
             else
-                status["gimbal"][gimbalCorrectNXName] = math.max(0, status["gimbal"][gimbalCorrectNXName] - 1)
-                status["gimbal"][gimbalCorrectPXName] = math.min(15, status["gimbal"][gimbalCorrectPXName] + 1)
+                status["gimbal"]["correctionNX"] = math.max(0, status["gimbal"]["correctionNX"] - 1)
+                status["gimbal"]["correctionPX"] = math.min(15, status["gimbal"]["correctionPX"] + 1)
             end
 
             if (z2 < 0) then
-                status["gimbal"][gimbalCorrectPZName] = math.max(0, status["gimbal"][gimbalCorrectPZName] - 1)
-                status["gimbal"][gimbalCorrectNZName] = math.min(15, status["gimbal"][gimbalCorrectNZName] + 1)
+                status["gimbal"]["correctionPZ"] = math.max(0, status["gimbal"]["correctionPZ"] - 1)
+                status["gimbal"]["correctionNZ"] = math.min(15, status["gimbal"]["correctionNZ"] + 1)
             else
-                status["gimbal"][gimbalCorrectNZName] = math.max(0, status["gimbal"][gimbalCorrectNZName] - 1)
-                status["gimbal"][gimbalCorrectPZName] = math.min(15, status["gimbal"][gimbalCorrectPZName] + 1)
+                status["gimbal"]["correctionNZ"] = math.max(0, status["gimbal"]["correctionNZ"] - 1)
+                status["gimbal"]["correctionPZ"] = math.min(15, status["gimbal"]["correctionPZ"] + 1)
             end
 
-            redstoneLinks[gimbalCorrectPXName]:setAnalogOutput(status["gimbal"][gimbalCorrectPXName])
-            redstoneLinks[gimbalCorrectNXName]:setAnalogOutput(status["gimbal"][gimbalCorrectNXName])
-            redstoneLinks[gimbalCorrectNZName]:setAnalogOutput(status["gimbal"][gimbalCorrectNZName])
-            redstoneLinks[gimbalCorrectPZName]:setAnalogOutput(status["gimbal"][gimbalCorrectPZName])
+            redstoneLinks[gimbalCorrectPXName]:setAnalogOutput(status["gimbal"]["correctionPX"])
+            redstoneLinks[gimbalCorrectNXName]:setAnalogOutput(status["gimbal"]["correctionNX"])
+            redstoneLinks[gimbalCorrectPZName]:setAnalogOutput(status["gimbal"]["correctionPZ"])
+            redstoneLinks[gimbalCorrectNZName]:setAnalogOutput(status["gimbal"]["correctionNZ"])
         end
     )
 
@@ -241,22 +272,24 @@ end,
     assert(target)
 
     local tailDeg, tailDegRef, liftRL1, liftRL2, pushRL1, pushRL2, spdX, spdZ, f1L, f1M, f2L, f2M
-    status["propeller"]["liftRpm"] = parseNumber(target.getLine(11))
-    status["propeller"]["pushRpm"] = parseNumber(target.getLine(12))
+    status["propeller"]["liftRpm"] = parseNumber(target.getLine(1))
+    status["propeller"]["pushRpm"] = parseNumber(target.getLine(2))
     
-    -- directional redstone, where 0 is 180deg and 15 is 0deg 
+    --[[ [ Can't get the info yet ]
+    -- directional redstone, where 0 is 180deg and 15 is 0deg
     tailDeg = parseNumber(target.getLine(13))
     tailDegRef = parseNumber(target.getLine(14))
 
     if (tailDeg == 15) then
-        status["turnDeg"]["currentIncline"] = 0
+        status["propeller"]["t"] = 0
     elseif (tailDeg == 0) then
-        status["turnDeg"]["currentIncline"] = 180
+        status["propeller"]["tailDegAngle"] = 180
     else
         local deg = (180 / 15) * tailDeg -- there is a lot of error here, have them as close as possible
         if (tailDegRef < 7) then deg = deg * -1 end
-        status["turnDeg"]["currentIncline"] = deg
+        status["propeller"]["tailDegAngle"] = deg
     end
+    ]]
 
     liftRL1 = redstoneLinks[liftRL1Name]:getAnalogInput()
     liftRL2 = redstoneLinks[liftRL2Name]:getAnalogInput()
@@ -270,33 +303,34 @@ end,
     status["propeller"]["liftLevel"] = (liftRL1 + liftRL2) / 30;
     status["propeller"]["pushLevel"] = (pushRL1 + pushRL2) / 30;
 
-    spdX = parseNumber(target.getLine(1))
-    spdZ = parseNumber(target.getLine(3))
+    spdX = velSX:getVelocity()
+    spdZ = velSZ:getVelocity()
+    sdpY = velSY:getVelocity()
 
     status["speed"]["x"] = spdX
     status["speed"]["z"] = spdZ
+    status["speed"]["y"] = spdY
 
     local travelledSqr = status["distance"]["travelledSqr"]
 
     status["distance"]["travelledSqr"] = travelledSqr + (((spdX * spdX) + (spdZ * spdZ)) * delta)
-    status["turnDeg"]["degFromNorth"] = (360 - navTable.getRelativeAngle() + 270) % 360
+    status["facingAngle"]["currentDegFromNorth"] = (360 - navTable.getRelativeAngle() + 270) % 360
 
-    status["altitude"]["current"] = parseNumber(target.getLine(4))
-    status["gimbal"]["x"] = parseNumber(target.getLine(5))
-    status["gimbal"]["z"] = parseNumber(target.getLine(6))
+    status["altitude"]["current"] = altitudeSensor:getHeight()
+    status["altitude"]["pressure"] = altitudeSensor:getAirPressure()
 
-    f1L = parseNumber(target.getLine(7))
-    f1M = parseNumber(target.getLine(8))
-    f2L = parseNumber(target.getLine(9))
-    f2M = parseNumber(target.getLine(10))
+    var gimbal = gimbalSensor:getAngles()
+    status["gimbal"]["x"] = gimbal[1]
+    status["gimbal"]["z"] = gimbal[2]
+
+    f1L = fuelTank1:tanks()[1].amount
+    f2L = fuelTank2:tanks()[1].amount
 
     status["fuel"][1]["level"] = f1L
-    status["fuel"][1]["max"] = f1M
-    status["fuel"][1]["perc"] = (f1L / f1M)
+    status["fuel"][1]["perc"] = (f1L / fuelTank1Max)
 
     status["fuel"][2]["level"] = f2L
-    status["fuel"][2]["max"] = f2M
-    status["fuel"][2]["perc"] = (f2L / f2M)
+    status["fuel"][2]["perc"] = (f2L / fuelTank2Max)
 
     gimbalHandler:Update()
 
