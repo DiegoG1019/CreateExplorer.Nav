@@ -31,9 +31,6 @@ local repoName = "CreateExplorer.Nav"
 local ghDownloadAddr = "https://raw.githubusercontent.com/"..repoUser.."/"..repoName.."/refs/heads/main/"
 local ghQueryAddr = "https://api.github.com/repos/"..repoUser.."/"..repoName.."/git/trees/main?recursive=true"
 
-StarStream = {}
-StarStream.queryableInfo = {}
-
 local json = require 'json'
 
 function string.starts(String,Start)

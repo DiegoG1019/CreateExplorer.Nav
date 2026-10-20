@@ -2,6 +2,19 @@
 
 print("Initializing Prestigious Navigator Module")
 
+local gimbalCorrectInvertX, gimbalCorrectInvertZ, gimbalOffsetDeg
+local TwoPi = math.pi * 2
+
+local liftRL1Name = "Lift1"
+local liftRL2Name = "Lift2"
+local pushRL1Name = "Push1"
+local pushRL2Name = "Push2"
+local manualControlsRLName = "ManualControls"
+local gimbalCorrectPXName = "GimbalCorrectPositiveX"
+local gimbalCorrectNXName = "GimbalCorrectNegativeX"
+local gimbalCorrectPZName = "GimbalCorrectPositiveZ"
+local gimbalCorrectNZName = "GimbalCorrectNegativeZ"
+
 local function systemHandlerTableAction(self)
     if (self["delay"] == 0) or (os.clock() > (self["lastClock"] + self["delay"])) then
         self["lastClock"] = os.clock()
@@ -63,7 +76,11 @@ local status = {
     },
     ["gimbal"] = {
         ["x"] = 0,-- line 5
-        ["z"] = 0 -- line 6
+        ["z"] = 0,-- line 6,
+        [gimbalCorrectNXName] = 0,
+        [gimbalCorrectNZName] = 0,
+        [gimbalCorrectPXName] = 0,
+        [gimbalCorrectPZName] = 0
     },
     ["fuel"] = {
         {
@@ -86,6 +103,34 @@ end
 return {
 
 ["PreInit"] = function(ctx)
+    settings.define("shipman.invertGimbalX", {
+        description = "True to invert the gimbal correction on the x axis",
+        default = false,
+        type = "boolean",
+    })
+
+    settings.define("shipman.invertGimbalZ", {
+        description = "True to invert the gimbal correction on the z axis",
+        default = false,
+        type = "boolean",
+    })
+
+    settings.define("shipman.gimbalCorrectionOffsetDeg", {
+        description = "The angular offset (in degrees) of the gimbal correction mechanism relative to north",
+        default = 0,
+        type = "number",
+    })
+
+    gimbalCorrectInvertX = settings.get("shipman.invertGimbalX")
+    gimbalCorrectInvertZ = settings.get("shipman.invertGimbalZ")
+    gimbalOffsetDeg = settings.get("shipman.gimbalCorrectionOffsetDeg")
+
+    local cix, ciz, ofd
+    if gimbalCorrectInvertX then cix = "Normal X" else cix = "Inverted X" end
+    if gimbalCorrectInvertZ then ciz = "Normal Z" else ciz = "Inverted Z" end
+    ofd = "Offset by "..tostring(gimbalOffsetDeg).." degrees"
+
+    print("Gimbal Correction Settings: "..cix..", "..ciz..", "..ofd)
 end,
 
 ["Init"] = function(ctx)
@@ -106,9 +151,15 @@ end,
     navTable = peripheral.find("navigation_table")
     if not navTable then error("Could not find navigation_table peripheral") end
 
-    redstoneLinks = { peripheral.find("redstone_link") }
-    if (not redstoneLinks) or (#redstoneLinks == 0) then error("Could not any find redstone_link peripherals") end
-    if (#redstoneLinks ~= 5) then error("Expected 5 redstone_link peripherals, found " .. tostring(#redstoneLinks)) end
+    redstoneLinks = {}
+    local rlCount = 0
+    peripheral.find("redstone_link", function(name, rl)
+        redstoneLinks[name] = rl
+        rlCount = rlCount + 1
+    end)
+
+    if (not redstoneLinks) or (rlCount == 0) then error("Could not any find redstone_link peripherals") end
+    if (rlCount ~= 5) then error("Expected 5 redstone_link peripherals, found " .. tostring(rlCount)) end
 
     target.resize(64, 14)
 
@@ -126,18 +177,54 @@ end,
     )
 
     altitudeHandler = newSystemHandler(
-        3,
+        1,
         function(self)
-            -- WARNING!!
-            -- Not done
         end
     )
-
+    
     gimbalHandler = newSystemHandler(
-        5, -- This one's gonna be a doozy
+        .5, -- This one's gonna be a doozy
         function(self)
-            -- WARNING!!
-            -- Not done
+            -- prepare
+            local x = status["gimbal"]["x"]
+            local z = status["gimbal"]["z"]
+            if (math.abs(x) < 0.05) then return end
+            if (math.abs(z) < 0.05) then return end
+
+            if gimbalCorrectInvertX then x = x * -1 end
+            if gimbalCorrectInvertZ then z = z * -1 end
+
+            -- rotate
+            local theta = math.atan(x, z) % TwoPi
+            local angularOffset = math.rad(gimbalOffsetDeg)
+            local alpha = theta + angularOffset
+            local len = math.sqrt((x * x) + (z * z))
+            local x2 = len * math.cos(alpha)
+            local z2 = len * math.sin(alpha)
+
+            -- apply each component
+            -- After all of that, they're still degrees, since we're working with them as vectors and the unit makes no difference
+
+            if (x2 < 0) then
+                status["gimbal"][gimbalCorrectPXName] = math.max(0, status["gimbal"][gimbalCorrectPXName] - 1)
+                status["gimbal"][gimbalCorrectNXName] = math.min(15, status["gimbal"][gimbalCorrectNXName] + 1)
+            else
+                status["gimbal"][gimbalCorrectNXName] = math.max(0, status["gimbal"][gimbalCorrectNXName] - 1)
+                status["gimbal"][gimbalCorrectPXName] = math.min(15, status["gimbal"][gimbalCorrectPXName] + 1)
+            end
+
+            if (z2 < 0) then
+                status["gimbal"][gimbalCorrectPZName] = math.max(0, status["gimbal"][gimbalCorrectPZName] - 1)
+                status["gimbal"][gimbalCorrectNZName] = math.min(15, status["gimbal"][gimbalCorrectNZName] + 1)
+            else
+                status["gimbal"][gimbalCorrectNZName] = math.max(0, status["gimbal"][gimbalCorrectNZName] - 1)
+                status["gimbal"][gimbalCorrectPZName] = math.min(15, status["gimbal"][gimbalCorrectPZName] + 1)
+            end
+
+            redstoneLinks[gimbalCorrectPXName]:setAnalogOutput(status["gimbal"][gimbalCorrectPXName])
+            redstoneLinks[gimbalCorrectNXName]:setAnalogOutput(status["gimbal"][gimbalCorrectNXName])
+            redstoneLinks[gimbalCorrectNZName]:setAnalogOutput(status["gimbal"][gimbalCorrectNZName])
+            redstoneLinks[gimbalCorrectPZName]:setAnalogOutput(status["gimbal"][gimbalCorrectPZName])
         end
     )
 
@@ -171,10 +258,10 @@ end,
         status["turnDeg"]["currentIncline"] = deg
     end
 
-    liftRL1 = redstoneLinks["liftRL1"]:getAnalogInput()
-    liftRL2 = redstoneLinks["liftRL2"]:getAnalogInput()
-    pushRL1 = redstoneLinks["pushRL1"]:getAnalogInput()
-    pushRL2 = redstoneLinks["pushRL2"]:getAnalogInput()
+    liftRL1 = redstoneLinks[liftRL1Name]:getAnalogInput()
+    liftRL2 = redstoneLinks[liftRL2Name]:getAnalogInput()
+    pushRL1 = redstoneLinks[pushRL1Name]:getAnalogInput()
+    pushRL2 = redstoneLinks[pushRL2Name]:getAnalogInput()
 
     status["propeller"]["liftRL1"] = liftRL1
     status["propeller"]["liftRL2"] = liftRL2
@@ -211,11 +298,10 @@ end,
     status["fuel"][2]["max"] = f2M
     status["fuel"][2]["perc"] = (f2L / f2M)
 
-    status["manualcontrols"] = redstoneLinks["manualcontrols-switch"]:getInput()
-    -- missing turnDeg travelled and target
+    gimbalHandler:Update()
 
+    status["manualcontrols"] = redstoneLinks[manualControlsRLName]:getInput()
     if (not status["manualcontrols"]) then
-        gimbalHandler:Update()
         altitudeHandler:Update()
         distanceHandler:Update()
         turnDegHandler:Update()
