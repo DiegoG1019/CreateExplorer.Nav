@@ -324,7 +324,7 @@ end,
     status["altitude"]["current"] = altitudeSensor:getHeight()
     status["altitude"]["pressure"] = altitudeSensor:getAirPressure()
 
-    var gimbal = gimbalSensor:getAngles()
+    local gimbal = gimbalSensor:getAngles()
     status["gimbal"]["x"] = gimbal[1]
     status["gimbal"]["z"] = gimbal[2]
 
