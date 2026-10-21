@@ -1,35 +1,37 @@
 -- The thing that actually manages navigation and such
 
-print("Initializing Prestigious Navigator Module")
-
-local gimbalCorrectInvertX, gimbalCorrectInvertZ, gimbalOffsetDeg
-local TwoPi = math.pi * 2
-
+-- Program Settings
 local velSZName = "velocity_sensor_1"
 local velSXName = "velocity_sensor_2"
 local velSYName = "velocity_sensor_3"
 
-local liftRL1Name = "Lift1"
-local liftRL2Name = "Lift2"
-local pushRL1Name = "Push1"
-local pushRL2Name = "Push2"
-local manualControlsRLName = "ManualControls"
+local propellerRelayName = "redstone_relay_2"
+local liftRL1Name = "back"
+local liftRL2Name = "left"
+local pushRL1Name = "bottom"
+local pushRL2Name = "right"
+--local manualControlsRLName = "ManualControls"
 
-local gimbalRelayName = "redstone_relay_1"
-local gimbalCorrectPXName = "front"
-local gimbalCorrectNXName = "back"
-local gimbalCorrectPZName = "left"
-local gimbalCorrectNZName = "right"
+local gimbalRelay1Name = "redstone_relay_0"
+local gimbalRelay2Name = "redstone_relay_1"
 
 local fuelTank1Name = "create:fluid_tank_0"
 local fuelTank2Name = "create_connected:fluid_vessel_0"
 local fuelTank1Max = 1152000
 local fuelTank2Max = 2232000
 
+--
+
+print("Initializing Prestigious Navigator Module")
+require 'lib.MultiRedstone'
+
+local gimbalCorrect1InvertX, gimbalCorrect1InvertZ, gimbalOffsetDeg
+local TwoPi = math.pi * 2
+
 local context
-local gimbalRelay
+local gimbalCorrector
+local propellerRelay
 local target
-local redstoneLinks
 local navTable
 local gimbalSensor
 local altitudeSensor
@@ -132,19 +134,19 @@ return {
         type = "boolean",
     })
 
-    settings.define("shipman.gimbalCorrectionOffsetDeg", {
+    settings.define("shipman.gimbalCorrect1ionOffsetDeg", {
         description = "The angular offset (in degrees) of the gimbal correction mechanism relative to north",
         default = 0,
         type = "number",
     })
 
-    gimbalCorrectInvertX = settings.get("shipman.invertGimbalX")
-    gimbalCorrectInvertZ = settings.get("shipman.invertGimbalZ")
-    gimbalOffsetDeg = settings.get("shipman.gimbalCorrectionOffsetDeg")
+    gimbalCorrect1InvertX = settings.get("shipman.invertGimbalX")
+    gimbalCorrect1InvertZ = settings.get("shipman.invertGimbalZ")
+    gimbalOffsetDeg = settings.get("shipman.gimbalCorrect1ionOffsetDeg")
 
     local cix, ciz, ofd
-    if gimbalCorrectInvertX then cix = "Normal X" else cix = "Inverted X" end
-    if gimbalCorrectInvertZ then ciz = "Normal Z" else ciz = "Inverted Z" end
+    if gimbalCorrect1InvertX then cix = "Normal X" else cix = "Inverted X" end
+    if gimbalCorrect1InvertZ then ciz = "Normal Z" else ciz = "Inverted Z" end
     ofd = "Offset by "..tostring(gimbalOffsetDeg).." degrees"
 
     print("Gimbal Correction Settings: "..cix..", "..ciz..", "..ofd)
@@ -174,28 +176,39 @@ end,
     altitudeSensor = peripheral.find("altitude_sensor")
     if not altitudeSensor then error("Could not find altitude_sensor peripheral") end
 
-    gimbalRelay = peripheral.find(gimbalRelayName)
-    if not altitudeSensor then error("Could not find '"..gimbalRelayName.."' peripheral for gimbalRelay") end
+    local gimbalRelay1 = peripheral.wrap(gimbalRelay1Name)
+    if not gimbalRelay1 then error("Could not find '"..gimbalRelay1Name.."' peripheral for gimbalRelay1") end
+
+    local gimbalRelay2 = peripheral.wrap(gimbalRelay2Name)
+    if not gimbalRelay2 then error("Could not find '"..gimbalRelay2Name.."' peripheral for gimbalRelay2") end
+
+    gimbalCorrector = {
+        ["PX"] = NewMultiRedstone(
+            MultiRedstonePair(gimbalRelay1, "front"), MultiRedstonePair(gimbalRelay2, "front")
+        ),
+        ["NX"] = NewMultiRedstone(
+            MultiRedstonePair(gimbalRelay1, "back"), MultiRedstonePair(gimbalRelay2, "back")
+        ),
+        ["PZ"] = NewMultiRedstone(
+            MultiRedstonePair(gimbalRelay1, "left"), MultiRedstonePair(gimbalRelay2, "left")
+        ),
+        ["NZ"] = NewMultiRedstone(
+            MultiRedstonePair(gimbalRelay1, "right"), MultiRedstonePair(gimbalRelay2, "right")
+        )
+    }
+
+    propellerRelay = peripheral.wrap(propellerRelayName)
+    if not propellerRelay then error("Could not find '"..propellerRelayName.."' peripheral for propellerRelay") end
 
     fuelTank1 = peripheral.wrap(fuelTank1Name)
     if not fuelTank1 then error("Could not find '"..fuelTank1Name.."' peripheral fuelTank1") end
 
-    fuelTank2 = peripheral.find(fuelTank2Name)
+    fuelTank2 = peripheral.wrap(fuelTank2Name)
     if not fuelTank2 then error("Could not find '"..fuelTank2Name.."' peripheral fuelTank2") end
 
     velSX = peripheral.wrap(velSXName)
     velSY = peripheral.wrap(velSYName)
     velSZ = peripheral.wrap(velSZName)
-
-    redstoneLinks = {}
-    local rlCount = 0
-    peripheral.find("redstone_link", function(name, rl)
-        redstoneLinks[name] = rl
-        rlCount = rlCount + 1
-    end)
-
-    if (not redstoneLinks) or (rlCount == 0) then error("Could not any find redstone_link peripherals") end
-    if (rlCount ~= 5) then error("Expected 5 redstone_link peripherals, found " .. tostring(rlCount)) end
 
     target.resize(64, 14)
 
@@ -227,8 +240,8 @@ end,
             if (math.abs(x) < 0.05) then return end
             if (math.abs(z) < 0.05) then return end
 
-            if gimbalCorrectInvertX then x = x * -1 end
-            if gimbalCorrectInvertZ then z = z * -1 end
+            if gimbalCorrect1InvertX then x = x * -1 end
+            if gimbalCorrect1InvertZ then z = z * -1 end
 
             -- rotate
             local theta = math.atan(x, z) % TwoPi
@@ -242,25 +255,20 @@ end,
             -- After all of that, they're still degrees, since we're working with them as vectors and the unit makes no difference
 
             if (x2 < 0) then
-                status["gimbal"]["correctionPX"] = math.max(0, status["gimbal"]["correctionPX"] - 1)
-                status["gimbal"]["correctionNX"] = math.min(15, status["gimbal"]["correctionNX"] + 1)
+                status["gimbal"]["correctionPX"] = gimbalCorrector["PX"]:Decrement()
+                status["gimbal"]["correctionNX"] = gimbalCorrector["NX"]:Increment()
             else
-                status["gimbal"]["correctionNX"] = math.max(0, status["gimbal"]["correctionNX"] - 1)
-                status["gimbal"]["correctionPX"] = math.min(15, status["gimbal"]["correctionPX"] + 1)
+                status["gimbal"]["correctionPX"] = gimbalCorrector["PX"]:Increment()
+                status["gimbal"]["correctionNX"] = gimbalCorrector["NX"]:Decrement()
             end
 
             if (z2 < 0) then
-                status["gimbal"]["correctionPZ"] = math.max(0, status["gimbal"]["correctionPZ"] - 1)
-                status["gimbal"]["correctionNZ"] = math.min(15, status["gimbal"]["correctionNZ"] + 1)
+                status["gimbal"]["correctionPZ"] = gimbalCorrector["PZ"]:Decrement()
+                status["gimbal"]["correctionNZ"] = gimbalCorrector["NZ"]:Increment()
             else
-                status["gimbal"]["correctionNZ"] = math.max(0, status["gimbal"]["correctionNZ"] - 1)
-                status["gimbal"]["correctionPZ"] = math.min(15, status["gimbal"]["correctionPZ"] + 1)
+                status["gimbal"]["correctionPZ"] = gimbalCorrector["PZ"]:Increment()
+                status["gimbal"]["correctionNZ"] = gimbalCorrector["NZ"]:Decrement()
             end
-
-            gimbalRelay:setAnalogOutput(gimbalCorrectPXName, status["gimbal"]["correctionPX"])
-            gimbalRelay:setAnalogOutput(gimbalCorrectNXName, status["gimbal"]["correctionNX"])
-            gimbalRelay:setAnalogOutput(gimbalCorrectPZName, status["gimbal"]["correctionPZ"])
-            gimbalRelay:setAnalogOutput(gimbalCorrectNZName, status["gimbal"]["correctionNZ"])
         end
     )
 
@@ -276,7 +284,7 @@ end,
 ["Update"] = function(delta)
     assert(target)
 
-    local tailDeg, tailDegRef, liftRL1, liftRL2, pushRL1, pushRL2, spdX, spdZ, f1L, f1M, f2L, f2M
+    local tailDeg, tailDegRef, liftRL1, liftRL2, pushRL1, pushRL2, spdX, spdZ, spdY, f1L, f2L
     status["propeller"]["liftRpm"] = parseNumber(target.getLine(1))
     status["propeller"]["pushRpm"] = parseNumber(target.getLine(2))
     
@@ -296,10 +304,10 @@ end,
     end
     ]]
 
-    liftRL1 = redstoneLinks[liftRL1Name]:getAnalogInput()
-    liftRL2 = redstoneLinks[liftRL2Name]:getAnalogInput()
-    pushRL1 = redstoneLinks[pushRL1Name]:getAnalogInput()
-    pushRL2 = redstoneLinks[pushRL2Name]:getAnalogInput()
+    liftRL1 = propellerRelay:getAnalogInput(liftRL1Name)
+    liftRL2 = propellerRelay:getAnalogInput(liftRL2Name)
+    pushRL1 = propellerRelay:getAnalogInput(pushRL1Name)
+    pushRL2 = propellerRelay:getAnalogInput(pushRL2Name)
 
     status["propeller"]["liftRL1"] = liftRL1
     status["propeller"]["liftRL2"] = liftRL2
@@ -310,7 +318,7 @@ end,
 
     spdX = velSX:getVelocity()
     spdZ = velSZ:getVelocity()
-    sdpY = velSY:getVelocity()
+    spdY = velSY:getVelocity()
 
     status["speed"]["x"] = spdX
     status["speed"]["z"] = spdZ
@@ -339,11 +347,11 @@ end,
 
     gimbalHandler:Update()
 
-    status["manualcontrols"] = redstoneLinks[manualControlsRLName]:getInput()
-    if (not status["manualcontrols"]) then
+    --status["manualcontrols"] = redstoneLinks[manualControlsRLName]:getInput()
+    --if (not status["manualcontrols"]) then
         altitudeHandler:Update()
         distanceHandler:Update()
         turnDegHandler:Update()
-    end
+    --end
 end
 }
