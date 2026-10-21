@@ -15,10 +15,11 @@ local pushRL1Name = "Push1"
 local pushRL2Name = "Push2"
 local manualControlsRLName = "ManualControls"
 
-local gimbalCorrectPXName = "GimbalCorrectPositiveX" -- WARNING! Not set!
-local gimbalCorrectNXName = "GimbalCorrectNegativeX"
-local gimbalCorrectPZName = "GimbalCorrectPositiveZ"
-local gimbalCorrectNZName = "GimbalCorrectNegativeZ"
+local gimbalRelayName = "redstone_relay_1"
+local gimbalCorrectPXName = "front"
+local gimbalCorrectNXName = "back"
+local gimbalCorrectPZName = "left"
+local gimbalCorrectNZName = "right"
 
 local fuelTank1Name = "create:fluid_tank_0"
 local fuelTank2Name = "create_connected:fluid_vessel_0"
@@ -26,6 +27,7 @@ local fuelTank1Max = 1152000
 local fuelTank2Max = 2232000
 
 local context
+local gimbalRelay
 local target
 local redstoneLinks
 local navTable
@@ -172,11 +174,14 @@ end,
     altitudeSensor = peripheral.find("altitude_sensor")
     if not altitudeSensor then error("Could not find altitude_sensor peripheral") end
 
+    gimbalRelay = peripheral.find(gimbalRelayName)
+    if not altitudeSensor then error("Could not find '"..gimbalRelayName.."' peripheral for gimbalRelay") end
+
     fuelTank1 = peripheral.wrap(fuelTank1Name)
-    if not fuelTank1 then error("Could not find '"..fuelTank1Name.."' peripheral") end
+    if not fuelTank1 then error("Could not find '"..fuelTank1Name.."' peripheral fuelTank1") end
 
     fuelTank2 = peripheral.find(fuelTank2Name)
-    if not fuelTank2 then error("Could not find '"..fuelTank2Name.."' peripheral") end
+    if not fuelTank2 then error("Could not find '"..fuelTank2Name.."' peripheral fuelTank2") end
 
     velSX = peripheral.wrap(velSXName)
     velSY = peripheral.wrap(velSYName)
@@ -252,10 +257,10 @@ end,
                 status["gimbal"]["correctionPZ"] = math.min(15, status["gimbal"]["correctionPZ"] + 1)
             end
 
-            redstoneLinks[gimbalCorrectPXName]:setAnalogOutput(status["gimbal"]["correctionPX"])
-            redstoneLinks[gimbalCorrectNXName]:setAnalogOutput(status["gimbal"]["correctionNX"])
-            redstoneLinks[gimbalCorrectPZName]:setAnalogOutput(status["gimbal"]["correctionPZ"])
-            redstoneLinks[gimbalCorrectNZName]:setAnalogOutput(status["gimbal"]["correctionNZ"])
+            gimbalRelay:setAnalogOutput(gimbalCorrectPXName, status["gimbal"]["correctionPX"])
+            gimbalRelay:setAnalogOutput(gimbalCorrectNXName, status["gimbal"]["correctionNX"])
+            gimbalRelay:setAnalogOutput(gimbalCorrectPZName, status["gimbal"]["correctionPZ"])
+            gimbalRelay:setAnalogOutput(gimbalCorrectNZName, status["gimbal"]["correctionNZ"])
         end
     )
 
