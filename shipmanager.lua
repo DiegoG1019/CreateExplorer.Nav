@@ -2,8 +2,8 @@
 
 -- Program Settings
 local velSZName = "velocity_sensor_1"
-local velSXName = "velocity_sensor_2"
-local velSYName = "velocity_sensor_3"
+local velSXName = "velocity_sensor_0"
+local velSYName = "velocity_sensor_2"
 
 local propellerRelayName = "redstone_relay_2"
 local liftRL1Name = "back"
@@ -41,7 +41,7 @@ local fuelTank1, fuelTank2
 local function systemHandlerTableAction(self)
     if (self["delay"] == 0) or (os.clock() > (self["lastClock"] + self["delay"])) then
         self["lastClock"] = os.clock()
-        self["updateValue"](self)
+        self["UpdateValue"](self)
     end
 end
 
@@ -162,7 +162,7 @@ end,
         error("Could not start Ship Manager: Invalid or non-existent AstralNet context")
     end
 
-    context.AstralNet.AddEndpoint("status", status)
+    context.AstralNet.AddEndpoint("status", function(msg) return status, 1 end)
 
     target = peripheral.find("create_target")
     if not target then error("Could not find create_target peripheral") end
@@ -207,8 +207,13 @@ end,
     if not fuelTank2 then error("Could not find '"..fuelTank2Name.."' peripheral fuelTank2") end
 
     velSX = peripheral.wrap(velSXName)
+    if not velSX then error("Could not find '"..velSXName.."' peripheral velSX") end
+
     velSY = peripheral.wrap(velSYName)
+    if not velSY then error("Could not find '"..velSYName.."' peripheral velSY") end
+
     velSZ = peripheral.wrap(velSZName)
+    if not velSZ then error("Could not find '"..velSZName.."' peripheral velSZ") end
 
     target.resize(64, 14)
 
@@ -218,7 +223,7 @@ end,
             -- WARNING!!
             -- set difference thresholds to adjust between the 30 levels of granularity of speed
 
-            if status["distance"]["travelledSqr"] >= status["distance"]["targetSqr"] then
+            if status["distance"]["targetSqr"] and status["distance"]["travelledSqr"] >= status["distance"]["targetSqr"] then
                 status["distance"]["travelledSqr"] = 0
                 status["distance"]["targetSqr"] = nil
             end
@@ -269,6 +274,9 @@ end,
                 status["gimbal"]["correctionPZ"] = gimbalCorrector["PZ"]:Increment()
                 status["gimbal"]["correctionNZ"] = gimbalCorrector["NZ"]:Decrement()
             end
+
+            local str = string.format("Applied Gimbal Correction: PX:%d ; NX:%d ; PZ:%d ; NZ:%d", status["gimbal"]["correctionPX"], status["gimbal"]["correctionNX"], status["gimbal"]["correctionPZ"], status["gimbal"]["correctionPZ"])
+            print(str)
         end
     )
 
@@ -304,10 +312,10 @@ end,
     end
     ]]
 
-    liftRL1 = propellerRelay:getAnalogInput(liftRL1Name)
-    liftRL2 = propellerRelay:getAnalogInput(liftRL2Name)
-    pushRL1 = propellerRelay:getAnalogInput(pushRL1Name)
-    pushRL2 = propellerRelay:getAnalogInput(pushRL2Name)
+    liftRL1 = propellerRelay.getAnalogInput(liftRL1Name)
+    liftRL2 = propellerRelay.getAnalogInput(liftRL2Name)
+    pushRL1 = propellerRelay.getAnalogInput(pushRL1Name)
+    pushRL2 = propellerRelay.getAnalogInput(pushRL2Name)
 
     status["propeller"]["liftRL1"] = liftRL1
     status["propeller"]["liftRL2"] = liftRL2
@@ -316,9 +324,9 @@ end,
     status["propeller"]["liftLevel"] = (liftRL1 + liftRL2) / 30;
     status["propeller"]["pushLevel"] = (pushRL1 + pushRL2) / 30;
 
-    spdX = velSX:getVelocity()
-    spdZ = velSZ:getVelocity()
-    spdY = velSY:getVelocity()
+    spdX = velSX.getVelocity()
+    spdZ = velSZ.getVelocity()
+    spdY = velSY.getVelocity()
 
     status["speed"]["x"] = spdX
     status["speed"]["z"] = spdZ
