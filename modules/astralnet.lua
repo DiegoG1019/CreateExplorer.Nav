@@ -94,6 +94,8 @@ end,
 
 ["Init"] = function(ctx)
   peripheral.find("modem", rednet.open)
+  local modem = peripheral.find("modem", rednet.open)
+  if not rednet.isOpen() then error("Did not find a modem to use astralnet") end
 
   if #endpoints > 0 then  
     context.AstralNet.Endpoints[""] = endpoints
