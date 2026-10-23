@@ -93,7 +93,8 @@ end
 end,
 
 ["Init"] = function(ctx)
-  
+  peripheral.find("modem", rednet.open)
+
   if #endpoints > 0 then  
     context.AstralNet.Endpoints[""] = endpoints
     
@@ -101,6 +102,6 @@ end,
     local hostname = tostring(settings.get("astralnet.host") or "")..":"..os.getComputerID()
     rednet.host("astralnet-query", hostname)
     
-    print("Started hosting 'astralnet-query'")
+    print("Started hosting 'astralnet-query' as '"..hostname.."'")
   end
 end }

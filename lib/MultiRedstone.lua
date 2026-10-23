@@ -78,7 +78,7 @@ function NewMultiRedstone(...)
     }
 
     for i,v in ipairs(p) do
-        v.peripheral:setAnalogOutput(v.side, 0)
+        v.peripheral.setAnalogOutput(v.side, 0)
     end
 
     return obj

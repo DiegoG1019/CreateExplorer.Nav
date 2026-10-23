@@ -12,7 +12,7 @@ local pushRL1Name = "bottom"
 local pushRL2Name = "right"
 --local manualControlsRLName = "ManualControls"
 
-local gimbalRelay1Name = "redstone_relay_0"
+local gimbalRelay1Name = "redstone_relay_4"
 local gimbalRelay2Name = "redstone_relay_1"
 
 local fuelTank1Name = "create:fluid_tank_0"
@@ -142,7 +142,7 @@ return {
 
     gimbalCorrect1InvertX = settings.get("shipman.invertGimbalX")
     gimbalCorrect1InvertZ = settings.get("shipman.invertGimbalZ")
-    gimbalOffsetDeg = settings.get("shipman.gimbalCorrect1ionOffsetDeg")
+    gimbalOffsetDeg = settings.get("shipman.gimbalCorrectionOffsetDeg")
 
     local cix, ciz, ofd
     if gimbalCorrect1InvertX then cix = "Normal X" else cix = "Inverted X" end
